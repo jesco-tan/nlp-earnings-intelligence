@@ -1,0 +1,46 @@
+{
+  "scenario": "us_regional_bank_stress_2020_2024",
+  "n_documents": 252,
+  "n_tickers": 8,
+  "n_quarters_analyzed": 17,
+  "data_source": "synthetic",
+  "sentiment_method": "mock (correlated)",
+  "mock_vs_true_correlation": 0.9102,
+  "failed_banks": [
+    "SIVB",
+    "FRC"
+  ],
+  "failed_banks_last_quarter": "2022Q4",
+  "n_anomaly_quarters": 11,
+  "sivb_anomaly_quarters": [
+    "2022Q4"
+  ],
+  "frc_anomaly_quarters": [
+    "2020Q3",
+    "2022Q4"
+  ],
+  "sivb_final_zscore": -1.9051,
+  "frc_final_zscore": -1.7114,
+  "mean_mda_sentiment_gsib": 0.2782,
+  "mean_risk_sentiment_gsib": -0.0494,
+  "mean_mda_sentiment_stressed": 0.1576,
+  "mean_risk_sentiment_stressed": -0.2619,
+  "max_section_gap_ticker": "KEY",
+  "max_section_gap_quarter": "2022Q4",
+  "max_section_gap_value": 0.9724,
+  "gap_alert_quarters_per_ticker": {
+    "ZION": 4,
+    "KEY": 3,
+    "SIVB": 3,
+    "FRC": 2,
+    "JPM": 2,
+    "RF": 2,
+    "USB": 2,
+    "BAC": 1
+  },
+  "sector_mean_all": 0.0153,
+  "sector_mean_survivors": 0.0416,
+  "survivorship_bias_pp": 0.0263,
+  "zscore_threshold": 1.5,
+  "section_gap_alert_threshold": 0.6
+}

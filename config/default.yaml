@@ -1,0 +1,43 @@
+edgar:
+  tickers:                      # U.S. regional bank stress scenario 2020–2024
+    - "JPM"                     # Tier 1 GSIB, diversified, high health
+    - "BAC"                     # Tier 1 GSIB, diversified, high health
+    - "USB"                     # Tier 2 super-regional, well-managed, survived
+    - "RF"                      # Tier 2 super-regional, well-managed, survived
+    - "KEY"                     # Tier 3 stressed, balance-sheet pressure, survived
+    - "ZION"                    # Tier 3 stressed, balance-sheet pressure, survived
+    - "SIVB"                    # Tier 3 stressed, FAILED March 2023
+    - "FRC"                     # Tier 3 stressed, FAILED May 2023
+  form_types:
+    - "10-K"
+    - "10-Q"
+  date_range:
+    start: "2020-01-01"
+    end: "2024-03-31"
+  sections:
+    - "risk_factors"
+    - "mda"                     # Management's Discussion and Analysis
+
+nlp:
+  spacy_model: "en_core_web_sm"
+  finbert_model: "ProsusAI/finbert"
+  bertopic_min_topic_size: 5
+  bertopic_n_gram_range: [1, 2]
+  sentence_batch_size: 32
+
+anomaly:
+  sentiment_zscore_threshold: 1.5   # flag if combined sentiment drops > 1.5 SD below ticker mean
+  section_gap_alert_threshold: 0.60 # flag if MD&A–risk gap exceeds this (optimism bias signal)
+
+synthetic:
+  use_synthetic: true
+  n_synthetic_docs: 252   # 8 tickers × varying quarters × 2 sections
+
+scenario:
+  name: "us_regional_bank_stress_2020_2024"
+  tiers:
+    gsib: ["JPM", "BAC"]
+    super_regional: ["USB", "RF"]
+    stressed: ["SIVB", "FRC", "KEY", "ZION"]
+  failed_banks: ["SIVB", "FRC"]
+  failure_quarter: "2023Q1"   # SIVB March 2023, FRC May 2023; both stop filing Q4 2022

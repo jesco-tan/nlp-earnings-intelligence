@@ -1,0 +1,26 @@
+entity,label,count
+United States,GPE,655
+Federal Reserve,ORG,596
+commercial real estate,PRODUCT,426
+California,GPE,392
+held-to-maturity,PRODUCT,373
+New York,GPE,346
+FDIC,ORG,327
+10%,PERCENT,298
+Paycheck Protection Program,PRODUCT,281
+5%,PERCENT,247
+China,GPE,205
+$1 billion,MONEY,201
+Federal Home Loan Bank,ORG,186
+1.5%,PERCENT,186
+certificates of deposit,PRODUCT,184
+Europe,GPE,182
+$500 million,MONEY,176
+Texas,GPE,151
+$2 billion,MONEY,149
+Office of the Comptroller of the Currency,ORG,134
+interest rate swaps,PRODUCT,132
+525 basis points,PERCENT,130
+U.S. Treasury,ORG,121
+$250 million,MONEY,121
+Basel Committee,ORG,86

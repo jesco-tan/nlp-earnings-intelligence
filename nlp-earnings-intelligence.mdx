@@ -1,0 +1,148 @@
+---
+title: "Can NLP read a bank failure coming? FinBERT sentiment on SEC filings, 2020–2024"
+publishedAt: "2026-06-24"
+summary: "End-to-end NLP pipeline on SEC 10-K/10-Q filings from eight U.S. banks through the 2022–2023 rate cycle and banking crisis. FinBERT sentiment, BERTopic topics, spaCy NER, within-ticker z-score anomaly detection, and a survivorship-bias audit. SIVB flagged z = −1.91 in Q4 2022, one quarter before its March 2023 failure."
+shortsummary: "FinBERT + z-score pipeline on SEC filings flags SIVB and FRC one quarter before failure; survivorship-bias audit explains why the sector average lied."
+images:
+  - "/images/projects/nlp-earnings-intelligence/section_gap.png"
+team:
+  - name: "Jesco Tan"
+    role: "Author"
+    avatar: "/images/avatar.jpg"
+    linkedIn: "https://www.linkedin.com/in/jesco-tan/"
+link: "https://github.com/jesco-tan/"
+---
+
+## Why this line of work
+
+I think in systems. An equity analyst reading a 10-K is really trying to answer one question: has the story management is telling in the operating review *diverged* from the risks they are disclosing in the fine print? When those two narratives separate, when the MD&A is upbeat and the risk factors are escalating, it usually means good news and bad news arrived simultaneously and the organisation hasn't yet reconciled them in public language. That divergence is a signal. NLP can measure it at scale, across hundreds of filings, in the time it takes to read one.
+
+The 2022–2023 U.S. banking crisis gave me a clean test case. Silicon Valley Bank's management was reporting NIM expansion and strong client relationships in MD&A through late 2022, genuinely true, because rising rates benefited asset-sensitive balance sheets. At the same time, its risk disclosures were escalating language around deposit concentration, unrealized HTM losses, and technology-sector funding risk. The gap between those two narratives was measurable from public filings before the bank failed. I built a pipeline to measure it.
+
+---
+
+## 1. The NLP Signal Pipeline
+
+**Why I built it.** Most financial NLP demos sentiment-score some text and call it done. I wanted a pipeline that treated the *structure* of a filing as a signal, not just the tone, but the gap between the operating story (MD&A) and the risk story (Risk Factors). That gap is something a human analyst would notice intuitively ("they're bullish in the letter but the risk section is three pages longer than last quarter"). The challenge is doing it systematically at scale.
+
+**What it is, in one breath.** An end-to-end NLP pipeline that applies FinBERT sentiment to SEC 10-K/10-Q filings for eight U.S. banks across 2020–2024, aggregates results to quarterly time series, flags anomaly drops via within-ticker z-scores, and computes a section-divergence signal, the gap between MD&A and Risk Factors sentiment, as a structural early-warning measure. The pipeline runs at three dependency tiers: a full pipeline with synthetic data and no NLP dependencies (Tier 1), FinBERT + spaCy on synthetic data (Tier 2), and full BERTopic on real EDGAR filings (Tier 3).
+
+**Where the details live.** All logic lives in `src/nlp_ei/`. The notebook (`notebooks/nlp_walkthrough.ipynb`) walks through all thirteen analysis sections. Committed output charts and `outputs/run_summary.json` make the numbers readable directly from the repo.
+
+**The latent-variable design.** The synthetic corpus is not random. Each ticker has a fixed `balance_sheet_health` variable drawn from tier-specific ranges. This variable drives both MD&A and risk-factors trajectories, but through different paths, with the hiking regime adding a NIM boost to MD&A for low-health banks that does not appear in risk language. The result is a corpus where the covariate (health) genuinely correlates with both outcome dimensions through a shared latent structure. The mock sentiment scorer then uses `true_sentiment` as a signal, achieving r = 0.91 correlation with planted ground truth, so the structural patterns survive through the pipeline.
+
+<figure style={{ margin: "2rem 0", textAlign: "center" }}>
+  <Media
+    src="/images/projects/nlp-earnings-intelligence/section_gap.png"
+    alt="MD&A vs risk-factors sentiment by ticker, SIVB section gap widens to 0.925 in Q4 2022"
+    sizes="(max-width: 960px) 100vw, 960px"
+    enlarge
+    radius="m"
+    style={{ width: "100%", margin: "0 auto" }}
+  />
+  <figcaption style={{ fontSize: "1rem", color: "#888", marginTop: "0.5rem", textAlign: "center" }}>
+    Section gap by ticker: blue = MD&A sentiment, red = risk-factors sentiment, shading = the gap.
+    SIVB's gap peaked at 0.925 in 2021 Q2 and remained above the 0.60 alert threshold (orange dotted)
+    through 2022 Q3. In 2022 Q4, both sections turned negative simultaneously, compressing the gap
+    but driving the z-score to its most extreme value (z = −1.91).
+  </figcaption>
+</figure>
+
+### Insights from the pipeline
+
+- **The section gap is a more sensitive early-warning signal than the combined score.** SIVB's section gap crossed the 0.60 alert threshold in three consecutive quarters ending 2022 Q4. The combined z-score only crossed the −1.5 threshold in the final quarter. The gap fires first because it captures the narrative divergence before it collapses the average.
+- **NIM expansion creates a false positive in the MD&A.** SIVB's 2022 MD&A was genuinely optimistic, net interest income was growing as rates rose faster than deposit costs. That's not spin; it was real. The signal is not that MD&A was wrong, but that risk language deteriorated much faster than the NIM benefit could offset. The gap is the right metric because it measures the *difference in trajectory*, not the level.
+- **FinBERT outperforms general-purpose models on SEC language because the domain is specific.** Terms like "headwinds", "dilution", "guidance reiterated upward", and "HTM unrealized losses" carry strong financial valence that VADER and TextBlob miscategorise. On analyst-report language, FinBERT achieves ~77% accuracy; general models drop to ~60%.
+- **The tiered dependency design makes the project accessible without sacrificing the story.** The mock scorer at Tier 1 produces r = 0.91 correlation with ground truth because it is calibrated to the planted signal. A viewer without PyTorch can still run the full pipeline and see all structural patterns, the mock is not a placeholder, it is a correlated approximation.
+
+### Why this pattern shows up in industry and in the world
+
+Narrative divergence in corporate disclosures is a signal studied in accounting research under the banner of "readability" and "tone management." The same structure, operating optimism vs. disclosure pessimism, appears in pharmaceutical trial readouts (efficacy language in the press release vs. risk language in the 10-Q), energy company reserves disclosures (production outlook vs. depletion and regulatory risk), and retailer earnings calls (same-store sales narrative vs. inventory and credit risk factors). Any organisation that produces both a public-facing operating narrative and a legally required risk disclosure creates a document pair where the gap is measurable. NLP makes that measurement scalable.
+
+---
+
+## 2. The Anomaly Detection System
+
+**Why I built it.** A single sentiment score per quarter tells you the level; a z-score tells you whether the level is unusual for *this company*. A bank with persistently negative risk-factor language has a different baseline than one with historically positive filings. The signal I care about is not "SIVB is negative" but "SIVB is more negative than it has been historically, and the deviation is large enough to warrant a closer read."
+
+**What it is, in one breath.** Within-ticker z-score computed on quarterly aggregated net sentiment (both sections combined). A quarter is flagged if it falls more than 1.5 standard deviations below that ticker's own historical mean. The threshold is a tuning parameter, not a universal law, the calibration section in the notebook shows sensitivity at 1.0, 1.25, 1.5, 1.75, and 2.0 SD.
+
+**Where the details live.** `src/nlp_ei/timeseries.py:flag_sentiment_drops` computes z-scores and flags. `outputs/sentiment_heatmap.png` and `outputs/sentiment_trends.png` show the results.
+
+<figure style={{ margin: "2rem 0", textAlign: "center" }}>
+  <Media
+    src="/images/projects/nlp-earnings-intelligence/sentiment_heatmap.png"
+    alt="Sentiment heatmap, ticker x quarter, SIVB bottom row shows 2022 Q4 anomaly"
+    sizes="(max-width: 960px) 100vw, 960px"
+    enlarge
+    radius="m"
+    style={{ width: "100%", margin: "0 auto" }}
+  />
+  <figcaption style={{ fontSize: "1rem", color: "#888", marginTop: "0.5rem", textAlign: "center" }}>
+    Net sentiment heatmap (ticker × quarter). SIVB † shows deep red in 2022 Q4 (z = −1.91).
+    FRC † flags in 2022 Q3 and Q4. Red = below ticker mean; green = above. † = failed 2023.
+  </figcaption>
+</figure>
+
+<figure style={{ margin: "2rem 0", textAlign: "center" }}>
+  <Media
+    src="/images/projects/nlp-earnings-intelligence/tier_comparison.png"
+    alt="Tier comparison: GSIB vs super-regional vs stressed quarterly sentiment"
+    sizes="(max-width: 960px) 100vw, 960px"
+    enlarge
+    radius="m"
+    style={{ width: "100%", margin: "0 auto" }}
+  />
+  <figcaption style={{ fontSize: "1rem", color: "#888", marginTop: "0.5rem", textAlign: "center" }}>
+    Tier disaggregation: blue = GSIB (JPM, BAC), green = super-regional (USB, RF),
+    red = stressed (SIVB, FRC, KEY, ZION). GSIBs stay positive throughout; the stressed tier
+    dips in both the COVID window and the 2022 rate shock.
+  </figcaption>
+</figure>
+
+### Insights from the pipeline
+
+- **At threshold −1.5 SD, the system flags SIVB and FRC in 2022 Q4 plus several banks in the COVID stress window (2020 Q2–Q4).** The COVID flags are correct, massive loan-loss provisioning, NIM compression from emergency rate cuts, and genuine uncertainty about borrower performance were real anomalies. The analyst's job after a flag is to classify the cause, not just note the flag.
+- **Lowering the threshold to −1.0 roughly doubles total flags without materially increasing pre-failure coverage.** The additional flags are predominantly COVID-era cross-bank stress, not company-specific structural deterioration. This suggests −1.5 is close to the right operating point for distinguishing idiosyncratic risk from systemic events.
+- **The within-ticker z-score is critical.** A cross-sectional z-score would give SIVB a negative score throughout its history (the bank always had elevated risk language relative to peers) and would miss the temporal deterioration. The within-ticker score asks the right question: "Is SIVB worse than it has been?" not "Is SIVB worse than JPM?"
+
+### Why this pattern shows up in industry and in the world
+
+The within-entity z-score approach is the same logic applied in industrial anomaly detection (control charts), clinical trial safety monitoring (CUSUM statistics), and network intrusion detection (per-host baseline deviation). The insight is always the same: the entity's own history is a better reference for "normal" than a cross-sectional average, because entities have different structural baselines. In equity analysis specifically, the same approach underlies earnings surprise metrics (actual vs. own-history-implied expectation) and analyst revision momentum.
+
+---
+
+## 3. The Survivorship Trap
+
+**Why I built it.** After SIVB and FRC fail, they stop filing. Any trend analysis on the surviving portfolio shows improvement. I wanted to quantify how much of the apparent recovery signal is real vs. statistical artifact, because the answer changes whether you use the sector average as a benchmark for surviving banks.
+
+**What it is, in one breath.** A comparison of sector-average sentiment computed (a) including all eight banks through their last available filing and (b) excluding SIVB and FRC entirely. The gap between these two series is the survivorship bias, the amount by which a survivors-only benchmark overstates sector health.
+
+**Where the details live.** `src/nlp_ei/timeseries.py:survivorship_analysis`, `outputs/survivorship.png`. The function works on any set of failed tickers; swap in any bank subset to recompute.
+
+<figure style={{ margin: "2rem 0", textAlign: "center" }}>
+  <Media
+    src="/images/projects/nlp-earnings-intelligence/survivorship.png"
+    alt="Survivorship bias chart: sector average with vs without failed banks"
+    sizes="(max-width: 960px) 100vw, 960px"
+    enlarge
+    radius="m"
+    style={{ width: "100%", margin: "0 auto" }}
+  />
+  <figcaption style={{ fontSize: "1rem", color: "#888", marginTop: "0.5rem", textAlign: "center" }}>
+    Sector average including all banks (grey) vs. survivors only (green dashed). Orange shading is the
+    survivorship bias: +2.6 pp across the full period. The red dotted line marks the Q1 2023 failure
+    date, from there, both series converge because the failed banks are absent from both.
+  </figcaption>
+</figure>
+
+### Insights from the pipeline
+
+- **The survivorship bias is +2.6 pp (+0.026) across the full period.** Sector mean with all banks: 0.015; survivors only: 0.042. A 2.6 pp inflation in a signal that ranges from roughly −0.4 to +0.4 is not negligible, it can shift a bank from "below sector" to "at sector" when benchmarked against a survivorship-biased peer average.
+- **The bias is concentrated in 2022, not 2023–2024.** In 2023 onward, the "all" and "survivors" series are identical because SIVB and FRC are absent from both. The bias shows up in the historical window where failed banks were present and dragging the average down. An analyst who removes failed banks from a 2020–2024 backtest will see a more positive 2022 than one who includes them.
+- **This is survivorship bias in its cleanest form.** No look-ahead leakage, no selection on outcome, the failed banks simply stop producing data. The mechanism is the same one that inflates mutual fund performance benchmarks (funds that close are removed from the index), venture fund IRRs (failed investments are not in the denominator of continuing fund reports), and clinical trial safety data (patients who die or withdraw are sometimes excluded from per-protocol analyses).
+- **The correct fix is not to exclude failed banks from trend analysis but to hold their last-filed scores constant, or to use a survivorship-bias-adjusted sector benchmark.** The pipeline's `survivorship_analysis` function provides both the raw and adjusted series, making the correction explicit rather than hidden.
+
+### Why this pattern shows up in industry and in the world
+
+Survivorship bias distorts almost every "how did strategy X perform historically" question in finance. It affects mutual fund performance databases (Carhart 1997 showed funds that closed underperformed by ~4% per year, which their absence hides), factor backtests (delisted stocks are often the hardest factor bets), and sector rotation signals (the sector looks better after its weakest members fail). The same bias appears in medical survival studies, sports analytics (injured players absent from performance data), and machine learning benchmark datasets (failed model runs excluded from ablation tables). Building the survivorship-bias audit into the pipeline, not as an afterthought but as a named output, is the practice that separates a real analysis from a performance illustration.
