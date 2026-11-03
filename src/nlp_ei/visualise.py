@@ -32,7 +32,7 @@ def plot_sentiment_heatmap(
         vmin=-0.5,
         vmax=0.5,
         ax=ax,
-        cbar_kws={"label": "Net Sentiment (positive − negative)", "shrink": 0.8},
+        cbar_kws={"label": "Mock net score (positive − negative)", "shrink": 0.8},
         linewidths=0.4,
     )
     ax.set_title(title, fontsize=13, pad=12)
@@ -43,10 +43,11 @@ def plot_sentiment_heatmap(
     new_labels = [f"{t} †" if t in _FAILED else t for t in ytick_labels]
     ax.set_yticklabels(new_labels, fontsize=9)
     ax.text(
-        0.01, -0.06, "† Bank failed 2023", transform=ax.transAxes,
+        0.01, -0.06, "† Programmed record cutoff", transform=ax.transAxes,
         fontsize=8, color="grey", style="italic",
     )
     plt.tight_layout()
+    fig.text(0.5, -0.02, "Synthetic scenario; mock NLP outputs.", ha="center", fontsize=9)
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
     return fig
@@ -99,6 +100,7 @@ def plot_sentiment_trends(
 
     plt.suptitle("Quarterly Net Sentiment Trends  (-- = anomaly flag)", fontsize=12, y=1.01)
     plt.tight_layout()
+    fig.text(0.5, -0.02, "Synthetic scenario; mock NLP outputs.", ha="center", fontsize=9)
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
     return fig
@@ -123,6 +125,7 @@ def plot_entity_freq(
     patches = [mpatches.Patch(color=c, label=l) for l, c in label_colours.items()]
     ax.legend(handles=patches, loc="lower right", fontsize=8)
     plt.tight_layout()
+    fig.text(0.5, -0.02, "Synthetic scenario; mock NLP outputs.", ha="center", fontsize=9)
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
     return fig
@@ -187,10 +190,11 @@ def plot_section_gap(
         axes[j].set_visible(False)
 
     plt.suptitle(
-        "MD&A vs Risk-Factors Sentiment  (shaded = gap, ⋮ = gap-alert threshold)",
+        "MD&A vs Risk-Factors Sentiment  (shaded = gap, vertical lines = gap-exceedance quarters)",
         fontsize=12, y=1.01,
     )
     plt.tight_layout()
+    fig.text(0.5, -0.02, "Synthetic scenario; mock NLP outputs.", ha="center", fontsize=9)
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
     return fig
@@ -229,6 +233,7 @@ def plot_tier_comparison(
     ax.set_title("Quarterly Sentiment by Bank Tier, GSIB vs Super-Regional vs Stressed", fontsize=12)
     ax.legend(fontsize=9)
     plt.tight_layout()
+    fig.text(0.5, -0.02, "Synthetic scenario; mock NLP outputs.", ha="center", fontsize=9)
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
     return fig
@@ -275,6 +280,7 @@ def plot_score_distribution(
 
     plt.suptitle("Net Sentiment Score Distributions", fontsize=12)
     plt.tight_layout()
+    fig.text(0.5, -0.02, "Synthetic scenario; mock NLP outputs.", ha="center", fontsize=9)
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
     return fig
@@ -286,7 +292,7 @@ def plot_survivorship(
 ) -> plt.Figure:
     """
     Dual-line chart showing sector average sentiment with vs without failed banks.
-    Illustrates the survivorship-bias trap: the 'improving sector' narrative post-2023
+    Compares available-record and retrospectively selected survivor cohorts; it does not attribute later recovery.
     is driven by SIVB and FRC dropping out of the corpus.
     """
     fig, ax = plt.subplots(figsize=(13, 5))
@@ -302,7 +308,7 @@ def plot_survivorship(
                     surv_df["avg_sentiment_all"],
                     surv_df["avg_sentiment_survivors"],
                     alpha=0.2, color="#FF9800",
-                    label="Survivorship bias (gap)")
+                    label="Retrospective cohort difference")
 
     labels = [str(q) for q in surv_df["year_quarter"]]
     ax.set_xticks(qs)
@@ -314,15 +320,16 @@ def plot_survivorship(
                      if str(q) >= "2023Q1"), None)
     if exit_idx is not None:
         ax.axvline(exit_idx, color="red", linewidth=1.5, linestyle=":",
-                   label="SIVB / FRC fail (2023Q1)")
+                   label="Programmed record cutoff (2023 Q1)")
 
     ax.set_ylabel("Average Net Sentiment (all sections)")
     ax.set_title(
-        "Survivorship Bias: Sector Average Sentiment With vs Without Failed Banks",
+        "Retrospective mock-score cohort comparison",
         fontsize=12,
     )
     ax.legend(fontsize=9)
     plt.tight_layout()
+    fig.text(0.5, -0.02, "Synthetic scenario; mock NLP outputs.", ha="center", fontsize=9)
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
     return fig

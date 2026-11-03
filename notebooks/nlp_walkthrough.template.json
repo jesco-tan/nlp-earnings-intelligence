@@ -1,0 +1,835 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Synthetic bank-disclosure workflow\n",
+    "\n",
+    "This notebook demonstrates 252 generated section records, correlated mock sentiment, fixed mock entities and random mock topics. Optional real-model adapters are implemented but were not executed for the published sample. No real filing language, investment recommendation or predictive warning is established. See [REPORT.md](../REPORT.md) for the current interpretation.\n",
+    "\n",
+    "Edited code cells are unexecuted until rerun; unchanged numerical outputs remain saved evidence.\n"
+   ],
+   "id": "9d22e1cd"
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Setup\n",
+    "\n",
+    "The default path is synthetic. FinBERT and BERTopic switches do not repair the unfinished EDGAR date, section and schema contract. Do not use the real-data branch as an end-to-end empirical workflow.\n"
+   ],
+   "id": "cf967372"
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2e10623a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import sys, yaml, json, warnings\n",
+    "from pathlib import Path\n",
+    "\n",
+    "warnings.filterwarnings(\"ignore\")\n",
+    "ROOT = Path.cwd().parent\n",
+    "sys.path.insert(0, str(ROOT))\n",
+    "\n",
+    "import numpy as np\n",
+    "import pandas as pd\n",
+    "import matplotlib.pyplot as plt\n",
+    "import seaborn as sns\n",
+    "\n",
+    "from src.nlp_ei.synthetic import generate_synthetic_corpus\n",
+    "from src.nlp_ei.sentiment import run_sentiment\n",
+    "from src.nlp_ei.ner import extract_entities, top_entities_by_type\n",
+    "from src.nlp_ei.topics import fit_bertopic, mock_topics\n",
+    "from src.nlp_ei.timeseries import (\n",
+    "    aggregate_quarterly, aggregate_quarterly_by_section,\n",
+    "    compute_section_gap, flag_sentiment_drops, pivot_heatmap,\n",
+    "    disaggregate_by_tier, survivorship_analysis,\n",
+    ")\n",
+    "from src.nlp_ei.visualise import (\n",
+    "    plot_sentiment_heatmap, plot_sentiment_trends, plot_entity_freq,\n",
+    "    plot_section_gap, plot_tier_comparison, plot_score_distribution,\n",
+    "    plot_survivorship,\n",
+    ")\n",
+    "\n",
+    "OUTPUTS = ROOT / \"outputs\"\n",
+    "OUTPUTS.mkdir(exist_ok=True)\n",
+    "\n",
+    "cfg = yaml.safe_load((ROOT / \"config\" / \"default.yaml\").read_text())\n",
+    "edgar_cfg = cfg[\"edgar\"]\n",
+    "nlp_cfg = cfg[\"nlp\"]\n",
+    "anomaly_cfg = cfg[\"anomaly\"]\n",
+    "scenario_cfg = cfg[\"scenario\"]\n",
+    "\n",
+    "FAILED_BANKS = scenario_cfg[\"failed_banks\"]\n",
+    "GAP_ALERT    = anomaly_cfg[\"section_gap_alert_threshold\"]\n",
+    "ZSCORE_THRESH = anomaly_cfg[\"sentiment_zscore_threshold\"]\n",
+    "\n",
+    "# Tier colour map for consistent styling\n",
+    "TIER_COLOURS = {\"gsib\": \"#2196F3\", \"super_regional\": \"#4CAF50\", \"stressed\": \"#F44336\"}\n",
+    "\n",
+    "sns.set_theme(style=\"whitegrid\")\n",
+    "print(\"Config loaded. Scenario:\", scenario_cfg[\"name\"])\n",
+    "print(\"Tickers:\", edgar_cfg[\"tickers\"])\n",
+    "print(\"Date range:\", edgar_cfg[\"date_range\"][\"start\"], \"–\", edgar_cfg[\"date_range\"][\"end\"])\n",
+    "print(\"Failed banks:\", FAILED_BANKS)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b9bb2596",
+   "metadata": {},
+   "source": [
+    "## Scenario assumptions\n",
+    "\n",
+    "Bank labels, tier health, regime terms and terminal stress are hand-assigned generator settings informed by known outcomes. SIVB and FRC share a programmed 2023 Q1 cutoff; the real closures occurred in March and May 2023. Generated filing dates are artificial quarter ends. The scenario cannot establish warning lead time.\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "09d41d68",
+   "metadata": {},
+   "source": [
+    "## Corpus assembly\n",
+    "\n",
+    "Verify generated section counts, quarter coverage and programmed cutoffs. The 252 rows are generated sections across 126 ticker-quarter cells, not authentic SEC filings.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "35409bb9",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "USE_SYNTHETIC = cfg[\"synthetic\"][\"use_synthetic\"]\n",
+    "USE_FINBERT   = False    # set True if transformers + torch installed\n",
+    "USE_BERTOPIC  = False    # set True if bertopic + sentence-transformers installed\n",
+    "\n",
+    "if USE_SYNTHETIC:\n",
+    "    corpus = generate_synthetic_corpus(\n",
+    "        tickers=edgar_cfg[\"tickers\"],\n",
+    "        start_date=edgar_cfg[\"date_range\"][\"start\"],\n",
+    "        end_date=edgar_cfg[\"date_range\"][\"end\"],\n",
+    "        seed=42,\n",
+    "    )\n",
+    "else:\n",
+    "    from src.nlp_ei.downloader import download_filings, load_filing_texts\n",
+    "    print(\"Downloading from EDGAR ...\")\n",
+    "    download_filings(\n",
+    "        tickers=edgar_cfg[\"tickers\"],\n",
+    "        form_types=edgar_cfg[\"form_types\"],\n",
+    "        start_date=edgar_cfg[\"date_range\"][\"start\"],\n",
+    "        end_date=edgar_cfg[\"date_range\"][\"end\"],\n",
+    "    )\n",
+    "    corpus = load_filing_texts(\"data/filings\", edgar_cfg[\"tickers\"])\n",
+    "\n",
+    "print(f\"Corpus: {len(corpus):,} documents | {corpus['ticker'].nunique()} tickers | \"\n",
+    "      f\"{corpus['year_quarter'].nunique()} quarters\")\n",
+    "corpus.head(3)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9f87f580",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Balance check: documents per ticker\n",
+    "doc_counts = corpus.groupby([\"ticker\", \"section\"]).size().unstack(fill_value=0)\n",
+    "doc_counts[\"total\"] = doc_counts.sum(axis=1)\n",
+    "doc_counts[\"tier\"] = corpus.drop_duplicates(\"ticker\").set_index(\"ticker\")[\"tier\"]\n",
+    "doc_counts[\"failed\"] = corpus.drop_duplicates(\"ticker\").set_index(\"ticker\")[\"failed_bank\"]\n",
+    "print(\"Documents per ticker:\")\n",
+    "print(doc_counts.sort_values(\"tier\").to_string())\n",
+    "print()\n",
+    "print(\"Note: SIVB and FRC have fewer documents, their programmed records end in 2022Q4.\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "90551b7d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Rate-regime distribution\n",
+    "if \"rate_regime\" in corpus.columns:\n",
+    "    regime_counts = corpus.groupby(\"rate_regime\")[\"ticker\"].count().rename(\"n_docs\")\n",
+    "    print(\"Documents per rate regime:\")\n",
+    "    print(regime_counts.to_string())\n",
+    "    print()\n",
+    "    print(\"Quarter range by ticker:\")\n",
+    "    q_range = corpus.groupby(\"ticker\")[\"year_quarter\"].agg([\"min\", \"max\"])\n",
+    "    print(q_range.to_string())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "16ebf70c",
+   "metadata": {},
+   "source": [
+    "## Mock sentiment and optional FinBERT\n",
+    "\n",
+    "Published scores read planted true_sentiment plus noise rather than interpreting text. Saved correlation 0.9102 checks that constructed relationship. FinBERT is optional and unverified here; its adapter uses approximate character-based chunking and token truncation. No external accuracy benchmark validates these outputs.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "4bc6e15d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(f\"Scoring with: {'FinBERT' if USE_FINBERT else 'mock scorer (correlated)'}\")\n",
+    "sentiment_df = run_sentiment(\n",
+    "    corpus,\n",
+    "    use_finbert=USE_FINBERT,\n",
+    "    model_name=nlp_cfg[\"finbert_model\"],\n",
+    "    batch_size=nlp_cfg[\"sentence_batch_size\"],\n",
+    ")\n",
+    "\n",
+    "# Verify the correlation is meaningful\n",
+    "if \"true_sentiment\" in sentiment_df.columns:\n",
+    "    corr = float(np.corrcoef(sentiment_df[\"true_sentiment\"], sentiment_df[\"score\"])[0, 1])\n",
+    "    print(f\"Mock scorer <-> true_sentiment correlation: r = {corr:.3f}\")\n",
+    "\n",
+    "print(f\"\\nScored {len(sentiment_df):,} documents\")\n",
+    "sentiment_df[[\"ticker\", \"year_quarter\", \"section\", \"positive\", \"negative\", \"neutral\",\n",
+    "              \"score\", \"label\"]].head(6)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "3d8c050c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Section-level means: MD&A is structurally more positive than risk factors\n",
+    "print(\"Mean net sentiment by section:\")\n",
+    "print(sentiment_df.groupby(\"section\")[\"score\"].describe().round(3).to_string())\n",
+    "print()\n",
+    "print(\"Mean net sentiment by tier:\")\n",
+    "if \"tier\" in sentiment_df.columns:\n",
+    "    print(sentiment_df.groupby(\"tier\")[\"score\"].agg([\"mean\",\"std\",\"min\",\"max\"]).round(3).to_string())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e44baef9",
+   "metadata": {},
+   "source": [
+    "## Generated score distributions\n",
+    "\n",
+    "Section and tier differences arise from planted parameters. These plots inspect mock distributions, not evidence about actual disclosure language or model discrimination.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e03d35f5",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig = plot_score_distribution(sentiment_df, save_path=OUTPUTS / \"score_distribution.png\")\n",
+    "plt.show()\n",
+    "print(\"Saved score_distribution.png\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8a156b93",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Quantitative summary of the distributional difference\n",
+    "for section in [\"mda\", \"risk_factors\"]:\n",
+    "    sub = sentiment_df[sentiment_df[\"section\"] == section][\"score\"]\n",
+    "    print(f\"{section:15s}: mean={sub.mean():.3f}  std={sub.std():.3f}  \"\n",
+    "          f\"p10={sub.quantile(0.10):.3f}  p90={sub.quantile(0.90):.3f}\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7fe77c8d",
+   "metadata": {},
+   "source": [
+    "## Section-score gaps\n",
+    "\n",
+    "Gap equals mock MD&A minus mock Risk Factors. The chosen 0.60 cutoff identifies scenario differences, not validated management bias. SIVB exceeds it in 2021 Q2, 2022 Q2 and 2022 Q3, with peak 0.9247 in 2021 Q2. KEY has the overall maximum, 0.9724 in 2022 Q4. Vertical orange markers identify gap-exceedance quarters.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1195f407",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Section-level aggregation\n",
+    "section_quarterly = aggregate_quarterly_by_section(sentiment_df)\n",
+    "section_quarterly = compute_section_gap(section_quarterly)\n",
+    "\n",
+    "# Add tier for downstream plotting\n",
+    "tier_map = corpus.drop_duplicates(\"ticker\").set_index(\"ticker\")[\"tier\"].to_dict()\n",
+    "section_quarterly[\"tier\"] = section_quarterly[\"ticker\"].map(tier_map)\n",
+    "\n",
+    "print(\"Section-level quarterly summary (first 6 rows):\")\n",
+    "print(section_quarterly[[\"ticker\", \"year_quarter\", \"mda_sentiment\",\n",
+    "                           \"risk_sentiment\", \"section_gap\"]].head(6).round(3).to_string(index=False))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1b5fbbbf",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Tickers that exceed the gap-alert threshold\n",
+    "alert_rows = section_quarterly[section_quarterly[\"section_gap\"] > GAP_ALERT]\n",
+    "print(f\"Quarters exceeding gap-alert threshold (>{GAP_ALERT}):\")\n",
+    "print(alert_rows[[\"ticker\",\"year_quarter\",\"mda_sentiment\",\"risk_sentiment\",\"section_gap\"]]\n",
+    "      .sort_values(\"section_gap\", ascending=False)\n",
+    "      .round(3)\n",
+    "      .to_string(index=False))\n",
+    "print()\n",
+    "\n",
+    "# Max gap per ticker\n",
+    "print(\"Maximum section gap by ticker:\")\n",
+    "gap_max = (\n",
+    "    section_quarterly.groupby(\"ticker\")[\"section_gap\"]\n",
+    "    .agg([\"max\",\"mean\"])\n",
+    "    .round(3)\n",
+    "    .rename(columns={\"max\":\"max_gap\",\"mean\":\"mean_gap\"})\n",
+    ")\n",
+    "print(gap_max.sort_values(\"max_gap\", ascending=False).to_string())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "ceb52e0f",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig = plot_section_gap(section_quarterly, gap_alert=GAP_ALERT,\n",
+    "                       save_path=OUTPUTS / \"section_gap.png\")\n",
+    "plt.show()\n",
+    "print(\"Saved section_gap.png\")\n",
+    "print()\n",
+    "print(\"Blue=MD&A sentiment  Red=Risk-Factors sentiment  Shaded=gap  Vertical orange lines=gap-exceedance quarters\")\n",
+    "print(\"These are mock scores with planted section differences.\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "17d4bd9c",
+   "metadata": {},
+   "source": [
+    "## Full-series anomaly calculation\n",
+    "\n",
+    "Z-scores use every supplied quarter for that ticker and sample standard deviation. Earlier values can depend on later quarters. The default threshold flags 11 ticker-quarter cells: eight programmed COVID-window flags across five tickers, two SIVB/FRC flags in 2022 Q4 and one RF flag in 2023 Q1. FRC also flags in 2020 Q3. USB in 2020 Q3 has the lowest z-score, -2.2599. These are retrospective mock deviations.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8ef74773",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "quarterly = aggregate_quarterly(sentiment_df)\n",
+    "quarterly[\"tier\"] = quarterly[\"ticker\"].map(tier_map)\n",
+    "anomaly_df = flag_sentiment_drops(quarterly, threshold_zscore=ZSCORE_THRESH)\n",
+    "anomaly_df[\"tier\"] = anomaly_df[\"ticker\"].map(tier_map)\n",
+    "\n",
+    "n_anomalies = int(anomaly_df[\"anomaly\"].sum())\n",
+    "print(f\"Anomaly quarters detected (z < -{ZSCORE_THRESH}): {n_anomalies}\")\n",
+    "print()\n",
+    "print(\"Flagged quarters:\")\n",
+    "flagged = anomaly_df[anomaly_df[\"anomaly\"]]\n",
+    "print(flagged[[\"ticker\",\"year_quarter\",\"avg_sentiment\",\"z_score\",\"tier\"]]\n",
+    "      .sort_values(\"z_score\")\n",
+    "      .round(3)\n",
+    "      .to_string(index=False))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "54b0075d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Focus on the pre-failure signals for SIVB and FRC\n",
+    "print(\"SIVB quarterly series:\")\n",
+    "sivb = anomaly_df[anomaly_df[\"ticker\"] == \"SIVB\"][\n",
+    "    [\"year_quarter\",\"avg_sentiment\",\"z_score\",\"anomaly\",\"qoq_change\"]\n",
+    "].round(3)\n",
+    "print(sivb.to_string(index=False))\n",
+    "print()\n",
+    "print(\"FRC quarterly series:\")\n",
+    "frc = anomaly_df[anomaly_df[\"ticker\"] == \"FRC\"][\n",
+    "    [\"year_quarter\",\"avg_sentiment\",\"z_score\",\"anomaly\",\"qoq_change\"]\n",
+    "].round(3)\n",
+    "print(frc.to_string(index=False))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9083f3b2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "hm = pivot_heatmap(quarterly)\n",
+    "fig = plot_sentiment_heatmap(hm, save_path=OUTPUTS / \"sentiment_heatmap.png\")\n",
+    "plt.show()\n",
+    "print(\"Saved sentiment_heatmap.png\")\n",
+    "print()\n",
+    "print(\"Marker = programmed record cutoff. Red = negative raw mock net score, not z-score.\")\n",
+    "print(\"The trajectories reflect programmed regime and health settings.\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "39e12a19",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig = plot_sentiment_trends(quarterly, anomaly_df=anomaly_df,\n",
+    "                            save_path=OUTPUTS / \"sentiment_trends.png\")\n",
+    "plt.show()\n",
+    "print(\"Saved sentiment_trends.png\")\n",
+    "print(\"Red dashed lines mark anomaly-flagged quarters.\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "5081be7d",
+   "metadata": {},
+   "source": [
+    "## Assigned tiers\n",
+    "\n",
+    "Fixed health and regime parameters create these differences. GSIB combined means are negative in 2020 Q2 through Q4 despite a full-period mean near +0.1144. No capital-buffer, depositor or interest-margin mechanism is measured.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b7c8f332",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "tier_agg = disaggregate_by_tier(sentiment_df)\n",
+    "print(\"Quarterly sentiment by tier:\")\n",
+    "print(tier_agg.pivot_table(\n",
+    "    index=\"tier\", values=\"avg_sentiment\", aggfunc=[\"mean\",\"std\",\"min\"]\n",
+    ").round(3).to_string())\n",
+    "print()\n",
+    "\n",
+    "# Section-level means by tier\n",
+    "print(\"Section-level means by tier:\")\n",
+    "for tier in [\"gsib\", \"super_regional\", \"stressed\"]:\n",
+    "    tickers_in_tier = [t for t, v in tier_map.items() if v == tier]\n",
+    "    sub = sentiment_df[sentiment_df[\"ticker\"].isin(tickers_in_tier)]\n",
+    "    m = sub.groupby(\"section\")[\"score\"].mean()\n",
+    "    mda_m = m.get(\"mda\", float(\"nan\"))\n",
+    "    risk_m = m.get(\"risk_factors\", float(\"nan\"))\n",
+    "    print(f\"  {tier:20s}  MD&A = {mda_m:+.3f}  Risk = {risk_m:+.3f}  \"\n",
+    "          f\"Gap = {mda_m - risk_m:.3f}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9363f309",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig = plot_tier_comparison(tier_agg, save_path=OUTPUTS / \"tier_comparison.png\")\n",
+    "plt.show()\n",
+    "print(\"Saved tier_comparison.png\")\n",
+    "print()\n",
+    "print(\"Blue=GSIB  Green=Super-Regional  Red=Stressed\")\n",
+    "print(\"Shaded bands: grey=COVID stress, orange=rate hiking cycle\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ab9ab0ab",
+   "metadata": {},
+   "source": [
+    "## Mock entity frequencies\n",
+    "\n",
+    "The published fallback is a fixed entity table scaled by 252/120 = 2.1 and truncated to integer counts. No extracted mention trends, geographic concentration or entity co-occurrence was measured.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "f6108cf5",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "entity_df = extract_entities(corpus, spacy_model=nlp_cfg[\"spacy_model\"])\n",
+    "print(f\"Unique entity types: {sorted(entity_df['label'].unique())}\")\n",
+    "print(f\"Total entity rows: {len(entity_df):,}\")\n",
+    "entity_df.head(15)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "766a564a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "entity_df.to_csv(OUTPUTS / \"entity_freq.csv\", index=False)\n",
+    "fig = plot_entity_freq(entity_df, top_n=15, save_path=OUTPUTS / \"entity_freq.png\")\n",
+    "plt.show()\n",
+    "print(\"Saved entity_freq.csv and entity_freq.png\")\n",
+    "print()\n",
+    "print(\"Top entities by type:\")\n",
+    "print(top_entities_by_type(entity_df, n=4).to_string(index=False))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8ee32844",
+   "metadata": {},
+   "source": [
+    "## Mock topic labels\n",
+    "\n",
+    "Seven supplied labels are randomly assigned using fixed weights and seed 0. They ignore text content. The optional BERTopic adapter is distinct; a real-data run may discover different themes and requires separate evaluation.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1664e3aa",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "texts = corpus[\"text\"].tolist()\n",
+    "\n",
+    "if USE_BERTOPIC:\n",
+    "    print(\"Fitting BERTopic model ...\")\n",
+    "    topic_model, topics, probs = fit_bertopic(\n",
+    "        texts,\n",
+    "        min_topic_size=nlp_cfg[\"bertopic_min_topic_size\"],\n",
+    "        n_gram_range=tuple(nlp_cfg[\"bertopic_n_gram_range\"]),\n",
+    "    )\n",
+    "    topic_info = topic_model.get_topic_info()\n",
+    "    print(f\"Topics found: {len(topic_info) - 1}  (topic -1 = outliers, expected 10–30%)\")\n",
+    "    print(topic_info.head(12))\n",
+    "\n",
+    "    try:\n",
+    "        fig_topics = topic_model.visualize_topics()\n",
+    "        fig_topics.write_html(str(OUTPUTS / \"topic_map.html\"))\n",
+    "        print(\"\\nSaved topic_map.html (interactive UMAP)\")\n",
+    "    except Exception as e:\n",
+    "        print(f\"Could not save topic map: {e}\")\n",
+    "\n",
+    "    topic_df = pd.DataFrame({\"text_idx\": range(len(texts)), \"topic_id\": topics})\n",
+    "else:\n",
+    "    print(\"Using mock topics (set USE_BERTOPIC=True for real BERTopic)\")\n",
+    "    topic_df = mock_topics(texts)\n",
+    "    print(\"\\nMock topic distribution:\")\n",
+    "    print(topic_df[\"topic_label\"].value_counts().to_string())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0602595e",
+   "metadata": {},
+   "source": [
+    "## In-sample threshold sensitivity\n",
+    "\n",
+    "Threshold magnitudes 1, 1.25, 1.5, 1.75 and 2 give total flags 25, 16, 11, 5 and 1. Counts in all SIVB/FRC quarters are 4, 3, 3, 1 and 0. Those are not pre-failure hit counts or independent calibration. Event-window labels are assigned by ticker and quarter.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "6d7103fd",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Classify anomaly flags\n",
+    "def classify_anomaly(row):\n",
+    "    q = str(row[\"year_quarter\"])\n",
+    "    ticker = row[\"ticker\"]\n",
+    "    if not row[\"anomaly\"]:\n",
+    "        return \"not_flagged\"\n",
+    "    # Programmed ticker-quarter category, not a predictive hit\n",
+    "    if ticker in [\"SIVB\", \"FRC\"] and q in [\"2022Q3\", \"2022Q4\"]:\n",
+    "        return \"late_2022_programmed_window\"\n",
+    "    # Programmed COVID-window category\n",
+    "    if q in [\"2020Q2\", \"2020Q3\", \"2020Q4\"]:\n",
+    "        return \"covid_stress\"\n",
+    "    # Anything else\n",
+    "    return \"other_flag\"\n",
+    "\n",
+    "anomaly_df[\"flag_type\"] = anomaly_df.apply(classify_anomaly, axis=1)\n",
+    "flag_summary = anomaly_df[anomaly_df[\"anomaly\"]][\"flag_type\"].value_counts()\n",
+    "print(\"Anomaly flag classification:\")\n",
+    "print(flag_summary.to_string())\n",
+    "print()\n",
+    "total_flags = flag_summary.sum()\n",
+    "pre_failure = flag_summary.get(\"late_2022_programmed_window\", 0)\n",
+    "covid = flag_summary.get(\"covid_stress\", 0)\n",
+    "print(f\"Programmed late-2022 window (SIVB/FRC 2022 Q3-Q4): {pre_failure}/{total_flags} flags\")\n",
+    "print(f\"Programmed COVID window: {covid}/{total_flags} flags\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d06b10ba",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Threshold sensitivity: how many flags at different z-score thresholds?\n",
+    "print(\"Flag count by z-score threshold:\")\n",
+    "print(f\"{'Threshold':>12}  {'Total flags':>12}  {'SIVB/FRC flags':>14}\")\n",
+    "for thresh in [1.0, 1.25, 1.5, 1.75, 2.0, 2.5]:\n",
+    "    tmp = flag_sentiment_drops(quarterly, threshold_zscore=thresh)\n",
+    "    n_total = tmp[\"anomaly\"].sum()\n",
+    "    n_sivb_frc = tmp[tmp[\"ticker\"].isin([\"SIVB\",\"FRC\"]) & tmp[\"anomaly\"]].shape[0]\n",
+    "    print(f\"{thresh:>12.2f}  {n_total:>12d}  {n_sivb_frc:>14d}\")\n",
+    "print()\n",
+    "print(\"Threshold 1.5 is the default. Lower = more flags (higher sensitivity).\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "711cf87a",
+   "metadata": {},
+   "source": [
+    "## Retrospective cohort comparison\n",
+    "\n",
+    "Available-record and survivor-only means of 17 quarterly averages are 0.0152679 and 0.0416132, a difference of 0.0263453 score units. The survivor cohort is selected using known outcomes. The curves coincide from 2023 Q1. There is no carry-forward, adjusted benchmark, constant-offset correction or attribution of later recovery.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "0d67d78c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "surv_df = survivorship_analysis(sentiment_df, failed_tickers=FAILED_BANKS)\n",
+    "print(\"Sector average: all banks vs. survivors only\")\n",
+    "print(surv_df[[\"year_quarter\",\"avg_sentiment_all\",\"avg_sentiment_survivors\",\n",
+    "               \"survivorship_bias\"]].round(3).to_string(index=False))\n",
+    "\n",
+    "overall_all = surv_df[\"avg_sentiment_all\"].mean()\n",
+    "overall_surv = surv_df[\"avg_sentiment_survivors\"].mean()\n",
+    "print(f\"\\nOverall mean, all: {overall_all:.4f}  |  survivors only: {overall_surv:.4f}\")\n",
+    "print(f\"Retrospective cohort difference: {overall_surv - overall_all:+.6f} score units\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "bf33966f",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig = plot_survivorship(surv_df, save_path=OUTPUTS / \"survivorship.png\")\n",
+    "plt.show()\n",
+    "print(\"Saved survivorship.png\")\n",
+    "print()\n",
+    "print(\"Grey line: sector average including all banks (incl. SIVB & FRC until 2022Q4)\")\n",
+    "print(\"Green line: sector average from survivors only\")\n",
+    "print(\"Orange shading: the survivorship bias (the gap between the two series)\")\n",
+    "print(\"Red dotted line: programmed record cutoff (2023 Q1)\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0287bd44",
+   "metadata": {},
+   "source": [
+    "## Engineering synthesis\n",
+    "\n",
+    "Keep planted signals separate from measured mechanisms. No bank investment or exit decision follows from these outputs. Empirical work needs repaired authentic ingestion, recorded executed backends without fallback, complete token coverage and evaluation on unseen periods and entities.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "325a62df",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# ─── SIGNAL 1: Anomaly Detection ───────────────────────────────\n",
+    "sivb_flags = anomaly_df[(anomaly_df[\"ticker\"]==\"SIVB\") & anomaly_df[\"anomaly\"]]\n",
+    "frc_flags  = anomaly_df[(anomaly_df[\"ticker\"]==\"FRC\")  & anomaly_df[\"anomaly\"]]\n",
+    "print(\"SIGNAL 1: Z-Score Anomaly Detection\")\n",
+    "print(f\"  SIVB anomaly quarters: {sorted(str(q) for q in sivb_flags['year_quarter'].values)}\")\n",
+    "print(f\"  FRC  anomaly quarters: {sorted(str(q) for q in frc_flags['year_quarter'].values)}\")\n",
+    "print()\n",
+    "\n",
+    "# ─── SIGNAL 2: Section Gap ─────────────────────────────────────\n",
+    "sivb_gap = section_quarterly[section_quarterly[\"ticker\"]==\"SIVB\"].sort_values(\"year_quarter\")\n",
+    "frc_gap  = section_quarterly[section_quarterly[\"ticker\"]==\"FRC\"].sort_values(\"year_quarter\")\n",
+    "print(\"SIGNAL 2: Section Gap (MD&A minus Risk Factors)\")\n",
+    "print(\"  SIVB:\")\n",
+    "print(sivb_gap[[\"year_quarter\",\"section_gap\"]].round(3).to_string(index=False))\n",
+    "print(\"  FRC:\")\n",
+    "print(frc_gap[[\"year_quarter\",\"section_gap\"]].round(3).to_string(index=False))\n",
+    "print()\n",
+    "\n",
+    "# ─── SIGNAL 3: Tier Spread ─────────────────────────────────────\n",
+    "print(\"SIGNAL 3: Tier-Level MD&A vs Risk Gap\")\n",
+    "for tier in [\"gsib\", \"super_regional\", \"stressed\"]:\n",
+    "    tickers_t = [t for t, v in tier_map.items() if v == tier]\n",
+    "    sub = sentiment_df[sentiment_df[\"ticker\"].isin(tickers_t)]\n",
+    "    m = sub.groupby(\"section\")[\"score\"].mean()\n",
+    "    mda_m = m.get(\"mda\", 0); risk_m = m.get(\"risk_factors\", 0)\n",
+    "    print(f\"  {tier:20s}  MD&A={mda_m:+.3f}  Risk={risk_m:+.3f}  Gap={mda_m-risk_m:.3f}\")\n",
+    "print()\n",
+    "\n",
+    "# ─── SIGNAL 4: Survivorship Bias ────────────────────────────────\n",
+    "print(\"SIGNAL 4: Survivorship Bias\")\n",
+    "print(f\"  Sector mean with SIVB+FRC: {surv_df['avg_sentiment_all'].mean():.3f}\")\n",
+    "print(f\"  Sector mean without:       {surv_df['avg_sentiment_survivors'].mean():.3f}\")\n",
+    "print(f\"  Cohort difference: {surv_df['avg_sentiment_survivors'].mean() - surv_df['avg_sentiment_all'].mean():+.6f} score units\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "ccf53a8b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(\"Synthetic engineering demonstration: no investment recommendation.\")\n",
+    "print(\"Full-series normalisation and outcome-informed generation prevent prospective warning claims.\")\n",
+    "print(\"Empirical work requires authentic dates/sections, recorded model execution and independent evaluation.\")\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d9acc02c",
+   "metadata": {},
+   "source": [
+    "## Export\n",
+    "\n",
+    "Schema version 2 labels the cohort difference in score units and records mock backend provenance. The quarterly CSV contains aggregates, not z-scores. The scored CSV contains mock results.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "3cbc0185",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import json as _json\n",
+    "# Save CSVs\n",
+    "sentiment_df.to_csv(OUTPUTS / \"sentiment_scored.csv\", index=False)\n",
+    "quarterly.to_csv(OUTPUTS / \"quarterly_sentiment.csv\", index=False)\n",
+    "\n",
+    "# Build run_summary\n",
+    "gsib_tickers = [t for t,v in tier_map.items() if v==\"gsib\"]\n",
+    "stressed_tickers = [t for t,v in tier_map.items() if v==\"stressed\"]\n",
+    "\n",
+    "def _mean(tickers, section=None):\n",
+    "    sub = sentiment_df[sentiment_df[\"ticker\"].isin(tickers)]\n",
+    "    if section: sub = sub[sub[\"section\"]==section]\n",
+    "    return round(float(sub[\"score\"].mean()), 4)\n",
+    "\n",
+    "sivb_flags_list = sorted(str(q) for q in sivb_flags[\"year_quarter\"].values)\n",
+    "frc_flags_list  = sorted(str(q) for q in frc_flags[\"year_quarter\"].values)\n",
+    "max_gap_row = section_quarterly.loc[section_quarterly[\"section_gap\"].idxmax()]\n",
+    "alert_rows = section_quarterly[section_quarterly[\"section_gap\"] > GAP_ALERT]\n",
+    "\n",
+    "run_summary = {\n",
+    "    \"schema_version\": 2,\n",
+    "    \"entity_method\": \"fixed mock frequency table\",\n",
+    "    \"topic_method\": \"random mock labels, seed 0\",\n",
+    "    \"schema_version\": 2,\n",
+    "    \"entity_method\": \"fixed mock frequency table\",\n",
+    "    \"topic_method\": \"random mock labels, seed 0\",\n",
+    "    \"scenario\": scenario_cfg[\"name\"],\n",
+    "    \"n_documents\": int(len(corpus)),\n",
+    "    \"n_tickers\": int(corpus[\"ticker\"].nunique()),\n",
+    "    \"n_quarters_analyzed\": int(corpus[\"year_quarter\"].nunique()),\n",
+    "    \"data_source\": \"synthetic\" if USE_SYNTHETIC else \"SEC EDGAR\",\n",
+    "    \"sentiment_method\": \"FinBERT\" if USE_FINBERT else \"mock (correlated)\",\n",
+    "    \"mock_vs_true_correlation\": round(float(np.corrcoef(\n",
+    "        sentiment_df[\"true_sentiment\"], sentiment_df[\"score\"])[0,1]), 4)\n",
+    "        if \"true_sentiment\" in sentiment_df.columns else None,\n",
+    "    \"failed_banks\": FAILED_BANKS,\n",
+    "    \"failed_banks_last_quarter\": \"2022Q4\",\n",
+    "    \"n_anomaly_quarters\": int(anomaly_df[\"anomaly\"].sum()),\n",
+    "    \"sivb_anomaly_quarters\": sivb_flags_list,\n",
+    "    \"frc_anomaly_quarters\": frc_flags_list,\n",
+    "    \"sivb_final_zscore\": round(float(\n",
+    "        anomaly_df[anomaly_df[\"ticker\"]==\"SIVB\"][\"z_score\"].min()), 4),\n",
+    "    \"frc_final_zscore\": round(float(\n",
+    "        anomaly_df[anomaly_df[\"ticker\"]==\"FRC\"][\"z_score\"].min()), 4),\n",
+    "    \"mean_mda_sentiment_gsib\": _mean(gsib_tickers, \"mda\"),\n",
+    "    \"mean_risk_sentiment_gsib\": _mean(gsib_tickers, \"risk_factors\"),\n",
+    "    \"mean_mda_sentiment_stressed\": _mean(stressed_tickers, \"mda\"),\n",
+    "    \"mean_risk_sentiment_stressed\": _mean(stressed_tickers, \"risk_factors\"),\n",
+    "    \"max_section_gap_ticker\": str(max_gap_row[\"ticker\"]),\n",
+    "    \"max_section_gap_quarter\": str(max_gap_row[\"year_quarter\"]),\n",
+    "    \"max_section_gap_value\": round(float(max_gap_row[\"section_gap\"]), 4),\n",
+    "    \"gap_alert_quarters_per_ticker\": alert_rows[\"ticker\"].value_counts().to_dict(),\n",
+    "    \"sector_mean_all\": round(float(surv_df[\"avg_sentiment_all\"].mean()), 4),\n",
+    "    \"sector_mean_survivors\": round(float(surv_df[\"avg_sentiment_survivors\"].mean()), 4),\n",
+    "    \"historical_cohort_difference_score\": round(float(\n",
+    "        surv_df[\"avg_sentiment_survivors\"].mean() - surv_df[\"avg_sentiment_all\"].mean()), 4),\n",
+    "    \"zscore_threshold\": ZSCORE_THRESH,\n",
+    "    \"section_gap_alert_threshold\": GAP_ALERT,\n",
+    "}\n",
+    "\n",
+    "(OUTPUTS / \"run_summary.json\").write_text(_json.dumps(run_summary, indent=2, default=str))\n",
+    "print(\"Outputs saved:\")\n",
+    "for f in sorted(OUTPUTS.iterdir()):\n",
+    "    print(f\"  {f.name}\")\n",
+    "print()\n",
+    "print(_json.dumps(run_summary, indent=2, default=str))"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": ".venv (3.14.5.final.0)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.14.5"
+  },
+  "evidence_revision": {
+   "date": "2026-11-03",
+   "description": "Corrected synthetic provenance and interpretation; edited code cells require execution before claiming new results.",
+   "figure_note": "Current labelled figures are in outputs and REPORT.md. Old embedded notebook images removed; changed code cells are unexecuted."
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

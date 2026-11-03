@@ -136,15 +136,8 @@ def run_sentiment(
     texts = corpus_df["text"].tolist()
 
     if use_finbert:
-        try:
-            scores = score_with_finbert(texts, model_name=model_name, batch_size=batch_size)
-        except (ImportError, Exception) as e:
-            print(f"FinBERT unavailable ({e}), falling back to mock scorer")
-            true_sents = (
-                corpus_df["true_sentiment"].tolist()
-                if "true_sentiment" in corpus_df.columns else None
-            )
-            scores = score_mock(texts, true_sentiments=true_sents)
+        # An explicitly requested real backend must fail rather than publish mock results.
+        scores = score_with_finbert(texts, model_name=model_name, batch_size=batch_size)
     else:
         true_sents = (
             corpus_df["true_sentiment"].tolist()
@@ -153,4 +146,7 @@ def run_sentiment(
         scores = score_mock(texts, true_sentiments=true_sents)
 
     sentiment_df = pd.DataFrame(scores)
-    return pd.concat([corpus_df.reset_index(drop=True), sentiment_df], axis=1)
+    result = pd.concat([corpus_df.reset_index(drop=True), sentiment_df], axis=1)
+    result.attrs["requested_sentiment_backend"] = "finbert" if use_finbert else "mock"
+    result.attrs["executed_sentiment_backend"] = "finbert" if use_finbert else "mock"
+    return result

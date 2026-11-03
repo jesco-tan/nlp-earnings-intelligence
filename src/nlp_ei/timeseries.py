@@ -94,9 +94,9 @@ def compute_section_gap(
     """
     Compute the MD&A–risk-factors sentiment gap per (ticker, quarter).
 
-    A large positive gap means management is telling an optimistic operating story
-    in MD&A while simultaneously flagging severe risks in disclosures, an
-    early-warning sign of optimism bias rather than balance-sheet strength.
+    A positive gap is a difference between section scores. The saved run uses
+    mock scores with planted section differences; no predictive or management
+    behaviour claim follows from the gap alone.
     """
     df = section_df.copy()
     if mda_col in df.columns and risk_col in df.columns:

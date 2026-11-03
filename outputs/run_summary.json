@@ -40,7 +40,11 @@
   },
   "sector_mean_all": 0.0153,
   "sector_mean_survivors": 0.0416,
-  "survivorship_bias_pp": 0.0263,
   "zscore_threshold": 1.5,
-  "section_gap_alert_threshold": 0.6
+  "section_gap_alert_threshold": 0.6,
+  "schema_version": 2,
+  "evidence_status": "synthetic demonstration; narrative and field definitions corrected 2026-11-03; no model refit",
+  "historical_cohort_difference_score": 0.0263,
+  "entity_method": "fixed mock frequency table",
+  "topic_method": "random mock labels, seed 0"
 }

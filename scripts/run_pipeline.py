@@ -1,7 +1,7 @@
 """
 Full analysis pipeline for the regional bank stress scenario.
 Generates all outputs/ artifacts and run_summary.json.
-Run from project root: .venv\Scripts\python scripts\run_pipeline.py
+Run from project root: .venv/Scripts/python.exe scripts/run_pipeline.py
 """
 
 import sys
@@ -228,6 +228,9 @@ sivb_last_anom = str(sivb_anomalies["year_quarter"].max()) if len(sivb_anomalies
 frc_last_anom = str(frc_anomalies["year_quarter"].max()) if len(frc_anomalies) else "none"
 
 run_summary = {
+    "schema_version": 2,
+    "entity_method": "recorded independently by entity stage; not FinBERT",
+    "topic_method": "random mock labels, seed 0",
     "scenario": scenario_cfg["name"],
     "n_documents": int(len(corpus)),
     "n_tickers": int(corpus["ticker"].nunique()),
@@ -257,7 +260,7 @@ run_summary = {
     "gap_alert_ticker_counts": alert_rows["ticker"].value_counts().to_dict(),
     "sector_mean_sentiment_all_banks": round(sector_with, 4),
     "sector_mean_sentiment_survivors_only": round(sector_without, 4),
-    "survivorship_bias_pp": round(sector_without - sector_with, 4),
+    "historical_cohort_difference_score": round(sector_without - sector_with, 4),
     "zscore_threshold": ZSCORE_THRESHOLD,
 }
 
