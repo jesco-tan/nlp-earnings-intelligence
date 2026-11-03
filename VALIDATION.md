@@ -1,9 +1,9 @@
-# Verification, 3 November 2026
+# Validation
 
-19 Python tests passed, including synthetic workflows and propagation of a requested real-backend failure. All seven labelled figures were redrawn from saved CSV values, without downloading or running real models. Python/notebook syntax, threshold counts and both report viewports passed. The notebook generator uses a reviewed source template; changed analytical cells have cleared execution state.
+I checked the extraction, backend failure handling, provenance and annotation requirements. All 25 Python tests passed, and a real FinBERT smoke check processed multiple chunks without truncation.
 
-## Interpretation limits
+I downloaded nine predefined annual filings and scored nine usable sections, processing all 327,746 content tokens. Source review caught inline references that contaminated section boundaries; regression tests now cover that failure. A cached rerun checked the model revision, exact section text and saved score hashes before reusing results.
 
-The current results are synthetic demonstrations. Passing software checks does not validate real-world predictive performance, causality or business benefit.
+## Scope
 
-Authentic EDGAR section/date/schema integration, complete token coverage and independent real-text evaluation remain unfinished. Optional sentiment failure now propagates instead of substituting mock results.
+The authentic sentiment outputs remain preliminary. Missing or incorporated-by-reference sections are explicit, and only BAC has paired MD&A/Risk Factors observations in this primary-document extraction. Independent human labels and adjudication are still required. The historical mock sentiment, entity and topic outputs are separate from this authentic sentiment run. See [REPORT.md](REPORT.md), [the study protocol](docs/authentic-study.md) and `outputs/authentic/manifest.json` for the evidence and remaining evaluation.

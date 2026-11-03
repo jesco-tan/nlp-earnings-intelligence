@@ -1,0 +1,174 @@
+{
+  "status": "source_boundary_inspection_complete_with_missing_sections",
+  "scope": "Inspected original HTML heading blocks and extracted opening/closing text for each filing; does not certify exhaustive section completeness or sentiment accuracy.",
+  "findings": [
+    "Corrected BAC starts to actual short block headings; inline references in business narrative excluded.",
+    "JPM MD&A and both WFC sections are incorporated by reference or absent from downloaded primary text; no substituted text scored.",
+    "Only BAC provides paired MD&A/Risk Factors observations for this primary-document extraction.",
+    "Human sentiment annotation remains outstanding."
+  ],
+  "sections": [
+    {
+      "ticker": "JPM",
+      "report_period": "2022-12-31",
+      "section": "risk_factors",
+      "source_sha256": "a22886455e0c5f9089e92643af185944b76aaba1a8daad44c8ceadd9845230e5",
+      "characters": 123855,
+      "status": "requires_manual_boundary_review",
+      "reason": null
+    },
+    {
+      "ticker": "JPM",
+      "report_period": "2022-12-31",
+      "section": "mda",
+      "source_sha256": "a22886455e0c5f9089e92643af185944b76aaba1a8daad44c8ceadd9845230e5",
+      "characters": 0,
+      "status": "missing",
+      "reason": "heading_not_found_or_section_too_short"
+    },
+    {
+      "ticker": "JPM",
+      "report_period": "2023-12-31",
+      "section": "risk_factors",
+      "source_sha256": "4faddad7346a356355d52beae736a3a57744f63b20b77b48e9174e533f24ab6f",
+      "characters": 131941,
+      "status": "requires_manual_boundary_review",
+      "reason": null
+    },
+    {
+      "ticker": "JPM",
+      "report_period": "2023-12-31",
+      "section": "mda",
+      "source_sha256": "4faddad7346a356355d52beae736a3a57744f63b20b77b48e9174e533f24ab6f",
+      "characters": 0,
+      "status": "missing",
+      "reason": "heading_not_found_or_section_too_short"
+    },
+    {
+      "ticker": "JPM",
+      "report_period": "2024-12-31",
+      "section": "risk_factors",
+      "source_sha256": "7a00e7f7430d16bcc719b59f99d69fb2a4b8387da1c94081e15c826b280cf1e5",
+      "characters": 136113,
+      "status": "requires_manual_boundary_review",
+      "reason": null
+    },
+    {
+      "ticker": "JPM",
+      "report_period": "2024-12-31",
+      "section": "mda",
+      "source_sha256": "7a00e7f7430d16bcc719b59f99d69fb2a4b8387da1c94081e15c826b280cf1e5",
+      "characters": 0,
+      "status": "missing",
+      "reason": "heading_not_found_or_section_too_short"
+    },
+    {
+      "ticker": "BAC",
+      "report_period": "2022-12-31",
+      "section": "risk_factors",
+      "source_sha256": "cd297f79024fae4f6a157268f74fd541c7eee6647f21dff365a0e798e1100427",
+      "characters": 115452,
+      "status": "requires_manual_boundary_review",
+      "reason": null
+    },
+    {
+      "ticker": "BAC",
+      "report_period": "2022-12-31",
+      "section": "mda",
+      "source_sha256": "cd297f79024fae4f6a157268f74fd541c7eee6647f21dff365a0e798e1100427",
+      "characters": 301543,
+      "status": "requires_manual_boundary_review",
+      "reason": null
+    },
+    {
+      "ticker": "BAC",
+      "report_period": "2023-12-31",
+      "section": "risk_factors",
+      "source_sha256": "57c6616d163651d66b2019c9c6f7419d0a14969f948f26d1179fcf91615e97a8",
+      "characters": 116410,
+      "status": "requires_manual_boundary_review",
+      "reason": null
+    },
+    {
+      "ticker": "BAC",
+      "report_period": "2023-12-31",
+      "section": "mda",
+      "source_sha256": "57c6616d163651d66b2019c9c6f7419d0a14969f948f26d1179fcf91615e97a8",
+      "characters": 301552,
+      "status": "requires_manual_boundary_review",
+      "reason": null
+    },
+    {
+      "ticker": "BAC",
+      "report_period": "2024-12-31",
+      "section": "risk_factors",
+      "source_sha256": "02fbc8df0b11d04ba4c1a1bb354d35795daf140f16509aff8b9502f327a33615",
+      "characters": 116952,
+      "status": "requires_manual_boundary_review",
+      "reason": null
+    },
+    {
+      "ticker": "BAC",
+      "report_period": "2024-12-31",
+      "section": "mda",
+      "source_sha256": "02fbc8df0b11d04ba4c1a1bb354d35795daf140f16509aff8b9502f327a33615",
+      "characters": 291726,
+      "status": "requires_manual_boundary_review",
+      "reason": null
+    },
+    {
+      "ticker": "WFC",
+      "report_period": "2022-12-31",
+      "section": "risk_factors",
+      "source_sha256": "093e89bb7061de4721c45d4c6139e05ac7b68f8cd050f40afdce3bd1d2422519",
+      "characters": 0,
+      "status": "missing",
+      "reason": "incorporated_by_reference_or_not_present"
+    },
+    {
+      "ticker": "WFC",
+      "report_period": "2022-12-31",
+      "section": "mda",
+      "source_sha256": "093e89bb7061de4721c45d4c6139e05ac7b68f8cd050f40afdce3bd1d2422519",
+      "characters": 0,
+      "status": "missing",
+      "reason": "incorporated_by_reference_or_not_present"
+    },
+    {
+      "ticker": "WFC",
+      "report_period": "2023-12-31",
+      "section": "risk_factors",
+      "source_sha256": "0a8088bdfa5cad57100d117bfe909c5a59b4c6c56ca0b66dff0a1966d01d7ffd",
+      "characters": 0,
+      "status": "missing",
+      "reason": "incorporated_by_reference_or_not_present"
+    },
+    {
+      "ticker": "WFC",
+      "report_period": "2023-12-31",
+      "section": "mda",
+      "source_sha256": "0a8088bdfa5cad57100d117bfe909c5a59b4c6c56ca0b66dff0a1966d01d7ffd",
+      "characters": 0,
+      "status": "missing",
+      "reason": "incorporated_by_reference_or_not_present"
+    },
+    {
+      "ticker": "WFC",
+      "report_period": "2024-12-31",
+      "section": "risk_factors",
+      "source_sha256": "fc892d6bdfff083bac0e776c885f73a9cbdc7e9b98c6a1d6f757421d85693b87",
+      "characters": 0,
+      "status": "missing",
+      "reason": "incorporated_by_reference_or_not_present"
+    },
+    {
+      "ticker": "WFC",
+      "report_period": "2024-12-31",
+      "section": "mda",
+      "source_sha256": "fc892d6bdfff083bac0e776c885f73a9cbdc7e9b98c6a1d6f757421d85693b87",
+      "characters": 0,
+      "status": "missing",
+      "reason": "incorporated_by_reference_or_not_present"
+    }
+  ]
+}

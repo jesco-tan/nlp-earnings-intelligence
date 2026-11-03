@@ -1,0 +1,23 @@
+{
+  "status": "predefined before authentic scoring",
+  "banks": {
+    "JPM": "0000019617",
+    "BAC": "0000070858",
+    "WFC": "0000072971"
+  },
+  "report_years": [
+    2022,
+    2023,
+    2024
+  ],
+  "form": "10-K",
+  "sections": [
+    "risk_factors",
+    "mda"
+  ],
+  "model": "ProsusAI/finbert",
+  "model_revision": "0bc2ac10dda6929bcb1f77ccc43c7ec5c424f031",
+  "seed": 42,
+  "annotation_sample_size": 90,
+  "anomaly_rule": "No anomaly alert with fewer than three earlier annual filings per bank/section. This panel is section-comparison only; no tuned anomaly or failure-prediction claims."
+}

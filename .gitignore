@@ -10,3 +10,6 @@ data/raw/
 .env
 .DS_Store
 models/
+
+data/authentic-cache/
+data/model-cache/

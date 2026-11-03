@@ -1,0 +1,18 @@
+{
+  "status": "real_model_executed",
+  "scope": "Authored test fixture only; no authentic filing result or independent label evaluation",
+  "model": "ProsusAI/finbert",
+  "revision": "0bc2ac10dda6929bcb1f77ccc43c7ec5c424f031",
+  "score": {
+    "positive": 0.025487217928219102,
+    "negative": 0.10136229523421518,
+    "neutral": 0.8731504939755474,
+    "score": -0.07587507730599607,
+    "label": "neutral",
+    "input_tokens": 1007,
+    "processed_tokens": 1007,
+    "truncated_tokens": 0,
+    "chunks": 2,
+    "aggregation": "non-overlapping content-token-weighted mean"
+  }
+}

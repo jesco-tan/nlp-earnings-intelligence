@@ -12,6 +12,7 @@ def download_filings(
     start_date: str,
     end_date: str,
     output_dir: Path | str = "data/filings",
+    contact_email: str | None = None,
 ) -> None:
     """
     Download 10-K and 10-Q filings for each ticker using sec-edgar-downloader.
@@ -26,7 +27,9 @@ def download_filings(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    dl = Downloader("MyCompany", "myemail@example.com", output_dir)
+    if not contact_email or "@" not in contact_email:
+        raise ValueError("Supply a real SEC contact_email before downloading")
+    dl = Downloader("Jesco Tan research", contact_email, output_dir)
 
     for ticker in tickers:
         for form in form_types:
@@ -34,7 +37,7 @@ def download_filings(
                 dl.get(form, ticker, after=start_date, before=end_date)
                 print(f"  Downloaded {form} for {ticker}")
             except Exception as e:
-                print(f"  WARN: {ticker} {form}: {e}")
+                raise RuntimeError(f"SEC download failed for {ticker} {form}") from e
 
 
 def load_filing_texts(

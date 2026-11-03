@@ -1,79 +1,49 @@
-# Financial NLP workflow: a synthetic bank-disclosure scenario
+# Financial NLP: authentic sections and a separate synthetic workflow
 
-Evidence interpretation revised 3 November 2026. Results describe the saved synthetic demonstration, not real-world outcomes. Numerical inputs and model estimates were not refitted for this narrative revision.
+Executed 3 November 2026. The authentic study uses real annual SEC filing text and real FinBERT inference. It remains preliminary: human sentiment evaluation is outstanding and primary-document extraction leaves material gaps. Historical synthetic examples remain explicitly synthetic.
 
-I built a workflow for comparing operating and risk language, aggregating sentiment and investigating unusual changes within an entity. The published demonstration uses synthetic filing-style text and mock NLP outputs. It illustrates the analysis machinery; it does not show that a model anticipated actual bank failures.
+## Bounded authentic corpus
 
-## What the published run contains
+Panel specified before scoring: JPM, BAC and WFC, annual 10-K reporting periods 2022, 2023 and 2024. Nine primary filings were downloaded using an identifying SEC header, cached locally with hashes and accession numbers, document URLs, reporting dates and acceptance timestamps. The contact address is not stored in repository artifacts. Raw caches and model weights remain ignored.
 
-The saved corpus has 252 generated section records across eight bank labels and 17 calendar quarters, from 2020 Q1 to 2024 Q1. Each available ticker-quarter has one MD&A record and one Risk Factors record, giving 126 ticker-quarter observations. These are generated sections, not authentic SEC filings.
+Nine of 18 requested sections are usable in the primary documents: Risk Factors for JPM and BAC, plus MD&A for BAC. JPM MD&A and both WFC sections are missing or incorporated by reference into separate annual-report material. They were neither imputed nor treated as neutral scores. Consequently paired section comparisons are limited to BAC. Expanding incorporated annual reports is a separate extraction task.
 
-The generator assigns fixed health values, rate-regime effects and extra terminal stress to the SIVB and FRC scenarios. Both scenarios stop after 2022 Q4 under the same programmed cutoff. That cutoff simplifies history and does not establish when real filings were available.
+Boundary review caught inline cross-references masquerading as Item headings. The extractor now uses short block headings, and source heading/start/end inspection is recorded in `outputs/authentic/boundary-review.json`. This is bounded extraction review, not an assertion of perfect completeness. Missing-section reasons remain explicit in the full extraction export.
 
-The mock sentiment scorer reads the generator's `true_sentiment` values and adds noise. It does not infer sentiment from the text. Its saved correlation of 0.9102 with those labels confirms that the designed signal survives the mock scoring step; it does not measure FinBERT accuracy. The saved entity frequencies come from a fixed fallback table, and the seven topic labels are assigned randomly using fixed weights.
+## Real-model execution and coverage
 
-## Implemented capability and execution evidence
+Model and tokenizer revision: `ProsusAI/finbert@0bc2ac10dda6929bcb1f77ccc43c7ec5c424f031`. All 327,746 content tokens across the nine sections were scored; zero tokens were truncated. Nonoverlapping chunks fit within the model's 512-token capacity including special tokens. Section probabilities are averaged by content-token count. This aggregation is pragmatic, not independently validated document sentiment. Tables, boilerplate and numerical disclosures remain in the extracted text and can affect scores.
 
-The project implements quarterly aggregation, MD&A/Risk Factors comparison, within-ticker anomaly calculations, tier summaries, a historical cohort comparison, charts and report exports. The executed notebook and saved summary record the synthetic and mock path.
+| Bank | Reporting year | Section | Net model sentiment | Content tokens |
+| --- | --- | --- | --- | --- |
+| JPM | 2022 | risk_factors | -0.6919 | 22,844 |
+| JPM | 2023 | risk_factors | -0.6946 | 24,273 |
+| JPM | 2024 | risk_factors | -0.6574 | 25,023 |
+| BAC | 2022 | risk_factors | -0.6461 | 20,712 |
+| BAC | 2022 | mda | -0.0840 | 64,919 |
+| BAC | 2023 | risk_factors | -0.6139 | 20,934 |
+| BAC | 2023 | mda | -0.0833 | 64,933 |
+| BAC | 2024 | risk_factors | -0.6492 | 21,137 |
+| BAC | 2024 | mda | -0.0540 | 62,971 |
 
-Optional adapters wrap FinBERT, spaCy and BERTopic. They are implemented capabilities, with no verified real-model results in the published artifacts. The EDGAR branch needs further integration: the current loader does not supply actual filing dates or extract the two sections required downstream. Changing notebook flags alone is insufficient for a verified end-to-end SEC analysis.
+![Preliminary model outputs on authentic primary-document sections](outputs/authentic_section_scores.png)
 
-The [saved run summary](https://github.com/jesco-tan/nlp-earnings-intelligence/blob/94c13f16020a6e8695d232d460ec55faee99b094/outputs/run_summary.json) identifies the data as synthetic and the sentiment method as correlated mock scoring. The [executed notebook](https://github.com/jesco-tan/nlp-earnings-intelligence/blob/94c13f16020a6e8695d232d460ec55faee99b094/notebooks/nlp_walkthrough.ipynb) also records fallback entity extraction and mock topics.
+Within the three paired BAC filings, MD&A has a less negative model score than Risk Factors. This is a descriptive output of one fixed model and extraction/aggregation convention. It does not establish independently measured sentiment, unusual distress or predictive performance. JPM has no paired MD&A comparison here, and no WFC section result is available.
 
-## Section comparison
+## Independent evaluation remains required
 
-The section gap is the mock MD&A score minus the mock Risk Factors score. It demonstrates how to compare two document sections while retaining their separate trajectories.
+A frozen, blinded sample of 45 sentences is in `outputs/authentic/human_annotation.csv`. The rubric in `docs/authentic-study.md` defines positive, negative and neutral labels. Two humans label independently, then adjudicate disagreements without seeing model predictions. Run `scripts/evaluate_human_labels.py` only after labels are complete; it records the frozen label-file hash, per-class precision/recall/F1, confusion matrix and disagreement. Missing labels cause an explicit failure. No model-generated label is ground truth.
 
-![Generated MD&A and Risk Factors mock scores by bank label, with marked gap-exceedance quarters](outputs/section_gap.png)
+The sample is small and drawn from the same bounded corpus. It cannot establish general sentiment accuracy or a failure-warning system. Filing acceptance timestamps are preserved, but with only three annual periods per series there is no validated earlier-period threshold and later-period anomaly evaluation. No anomaly alert or bank-failure claim is made from this run.
 
-Synthetic scenario; mock NLP outputs. Blue shows MD&A and red shows Risk Factors. Vertical orange lines mark quarters with gap greater than 0.60. SIVB exceeds that setting in 2021 Q2, 2022 Q2 and 2022 Q3, with a maximum of 0.9247 in 2021 Q2. These are not three consecutive quarters; the 2022 Q4 gap is 0.4886.
+## Reproduction
 
-KEY has the largest generated gap, 0.9724 in 2022 Q4. Tier differences and divergence reflect the health and regime terms deliberately specified in the generator. This run does not establish that section divergence measures optimism bias or provides empirical warning of failure.
+On Python 3.14 create `.venv` and install `requirements-authentic.txt`. Set SEC_CONTACT locally to the approved real contact email, then run `.venv/Scripts/python.exe scripts/run_authentic.py`. Source requests are sequential and limited to four per second, HTTP errors stop execution, and original source bytes are hashed. The pinned revision, source hashes, source-document hashes, model-cache hashes and package versions are in `outputs/authentic/manifest.json`. Hash-verified scores may be reused only for identical filing/section text and revision. Token counts reproduce exactly; CPU softmax probabilities allow absolute tolerance 1e-6 on the recorded stack.
 
-## Retrospective anomaly scoring
+Run `.venv/Scripts/python.exe -m pytest tests -q -p no:cacheprovider`, then `.venv/Scripts/python.exe scripts/plot_authentic.py` and `python scripts/generate_html_report.py`. For independent evaluation, complete human_annotation.csv and run `.venv/Scripts/python.exe scripts/evaluate_human_labels.py`. Do not replace real-backend failures with mock results.
 
-The anomaly function averages both sections within each ticker-quarter, then standardises against that ticker's entire supplied series using the sample standard deviation. A score below -1.5 is flagged. The baseline includes the point being scored and, for earlier points, later observations.
+Model attribution: Dogu Araci (2019), FinBERT: Financial Sentiment Analysis with Pre-trained Language Models. [Model card and weights terms](https://huggingface.co/ProsusAI/finbert). [SEC developer access guidance](https://www.sec.gov/about/developer-resources).
 
-![Heatmap of raw generated quarterly net sentiment scores for eight bank labels](outputs/sentiment_heatmap.png)
+## Separate historical synthetic demonstration
 
-Synthetic scenario; mock NLP outputs. Colours show raw net scores centred on zero, not z-scores. At the chosen anomaly setting, SIVB flags in 2022 Q4 and FRC flags in 2020 Q3 and 2022 Q4. Their final z-scores are -1.9051 and -1.7114, respectively.
-
-There are 11 flagged ticker-quarters: eight in the programmed COVID window, two for SIVB/FRC in 2022 Q4 and one for RF in 2023 Q1. Changing the threshold magnitude from 1.5 to 1.0 increases the flag count from 11 to 25. This is an in-sample sensitivity check, not calibration of a predictive warning system.
-
-![Generated quarterly mock sentiment grouped by assigned GSIB, super-regional and stressed tiers](outputs/tier_comparison.png)
-
-Synthetic scenario; mock NLP outputs. Fixed health parameters and regime effects create differences between the assigned tiers. GSIBs have a positive full-period mean but negative combined scores during 2020 Q2 to Q4. These trajectories do not measure actual bank resilience.
-
-The programmed outcomes influence health, terminal stress and record availability. Together with full-series normalisation and artificial quarter-end dates, this rules out claims that these results demonstrate warnings available before actual failures.
-
-## Historical cohort comparison
-
-The survivorship function compares the average of all available records with an average that excludes the SIVB and FRC labels throughout history. The survivor-only cohort uses known outcomes, so it is explicitly retrospective.
-
-![Generated cohort averages with and without the two programmed failure labels](outputs/survivorship.png)
-
-Synthetic scenario; mock NLP outputs. Means of the 17 quarterly averages are 0.0152679 for available records and 0.0416132 for the survivor-only cohort, a difference of 0.0263453 sentiment-score units. The red marker is the programmed 2023 Q1 cutoff for both labels, not the actual failure date of both banks. From that quarter the cohorts contain the same records and their curves coincide.
-
-This illustrates how retrospective cohort selection changes a historical benchmark. It does not estimate the effect of real bank exits on sector health. The function does not carry scores forward or produce a survivorship-adjusted benchmark, and the average gap is not a general correction to apply to later quarters.
-
-## What this project demonstrates
-
-The engineering contribution is a modular workflow that keeps section-level and aggregate measures available, compares assigned groups, examines threshold sensitivity and exposes cohort composition through reproducible saved artifacts. Synthetic inputs make those mechanics inspectable without requiring large model downloads.
-
-An empirical extension would need authentic filing accessions and acceptance dates, validated section parsing, recorded real-model execution without mock fallback, and evaluation on unseen entities and periods with thresholds fixed in advance. A labelled SEC-text sample would also be needed to assess sentiment quality. Until then, the published outputs remain an engineering demonstration with planted signals.
-
-## In-sample threshold sensitivity
-
-| Threshold magnitude | Total ticker-quarter flags | Flags in all SIVB/FRC quarters |
-| --- | ---: | ---: |
-| 1.00 | 25 | 4 |
-| 1.25 | 16 | 3 |
-| 1.50 | 11 | 3 |
-| 1.75 | 5 | 1 |
-| 2.00 | 1 | 0 |
-
-These are counts from the saved mock scores. The SIVB/FRC column includes all their quarters, including FRC in 2020 Q3. It is not a count of pre-failure hits or a measurement of predictive specificity. Full-series z-scores and outcome-informed generation preclude prospective warning claims.
-
-## Optional adapters and unfinished EDGAR integration
-
-FinBERT uses approximate character-based chunking followed by 512-token truncation. Complete token coverage is not guaranteed. Enabling FinBERT or BERTopic on generated text remains a synthetic-data run. The EDGAR loader needs authentic acceptance dates, correct MD&A and Risk Factors extraction, a validated corpus schema and consistent downloader layout before end-to-end empirical use. The CLI runs synthetic mode; changing YAML does not make its corpus empirical. The sentiment adapter records requested and executed backends and now propagates real-model failure. Other optional stages still need complete provenance records.
+The original generated corpus has 252 mock-scored filing-style sections across eight bank labels. Its charts illustrate section gaps, cohort choices and retrospective anomaly mechanics. Its planted-label correlation is not FinBERT accuracy; mock entities and topics are not authentic extraction. The authentic run above performs sentiment only. It does not validate entity extraction, topic modelling or the historical synthetic anomaly thresholds. Previous synthetic outputs and notebook remain available with those limits.
